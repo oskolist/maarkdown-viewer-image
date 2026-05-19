@@ -1,4 +1,4 @@
-name: Build and Publish Docker Image
+name: Build and Publish Container Image
 
 on:
   schedule:
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: 'VijayAdithyaBK/maarkdown-viewer'
           ref: 'gh-pages'
@@ -35,29 +35,22 @@ jobs:
           echo "[INFO] Found latest commit hash: $COMMIT_HASH"
           echo "[INFO] Checking if Image Tag Exists in GHCR..."
           TAG="ghcr.io/$ACTOR/$REPOSITORY:$COMMIT_HASH"
-          # Use HEAD request to check manifest existence
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "$TAG")
-          if [ "$STATUS" -eq 200 ]; then
+          if docker manifest inspect "$TAG" > /dev/null 2>&1; then
+            echo "[INFO] Image tag $TAG already exists. Skipping build..."
             echo "imageexists=true" >> $GITHUB_OUTPUT
-            echo "[INFO] Image tag $TAG already exists. Skipping build."
           else
+            echo "[INFO] Image tag $TAG not found. Proceeding with build..."
             echo "imageexists=false" >> $GITHUB_OUTPUT
-            echo "[INFO] Image tag $TAG not found. Proceeding with build."
           fi
 
-      - name: Exit if Version Exists
-        if: steps.variables.outputs.imageexists == 'true'
-        run: exit 0
-
-      - name: Create Dockerfile
+      - name: Create Containerfile
+        if: steps.variables.outputs.imageexists == 'false'
         run: |
           cat <<EOF > .dockerignore
           .git/
           .git
           EOF
-          cat <<EOF > Dockerfile
+          cat <<EOF > Containerfile
           FROM nginx:latest
           RUN rm -r /usr/share/nginx/html
           COPY . /usr/share/nginx/html
@@ -66,19 +59,23 @@ jobs:
           EOF
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        if: steps.variables.outputs.imageexists == 'false'
+        uses: docker/setup-buildx-action@v4
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        if: steps.variables.outputs.imageexists == 'false'
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Docker Image
-        uses: docker/build-push-action@v5
+      - name: Build and Push Container Image
+        if: steps.variables.outputs.imageexists == 'false'
+        uses: docker/build-push-action@v7
         with:
           context: .
+          file: ./Containerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
