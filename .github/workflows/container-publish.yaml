@@ -51,7 +51,7 @@ jobs:
           .git
           EOF
           cat <<EOF > Containerfile
-          FROM nginx:latest
+          FROM nginx:alpine-slim
           RUN rm -r /usr/share/nginx/html
           COPY . /usr/share/nginx/html
           EXPOSE 80
